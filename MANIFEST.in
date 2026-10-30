@@ -1,0 +1,7 @@
+include LICENSE THIRD_PARTY_NOTICES.md README.md
+recursive-include tests *.py *.json
+global-exclude *.pyc
+prune docs
+prune tools
+prune private
+prune private-validation-tests
