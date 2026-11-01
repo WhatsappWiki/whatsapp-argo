@@ -25,11 +25,19 @@ def _read_file(path, limits):
     path = Path(path)
     if path.stat().st_size > limits.max_message_bytes:
         raise ArgoError("schema configuration exceeds limit")
+    chunks, size = [], 0
     with path.open("rb") as stream:
-        raw = stream.read(limits.max_message_bytes + 1)
-    if len(raw) > limits.max_message_bytes:
-        raise ArgoError("schema configuration exceeds limit")
-    return raw
+        while True:
+            # Bound each allocation even when the configured ceiling exceeds
+            # platform read sizes; still detect files growing after stat().
+            chunk = stream.read(min(64 * 1024, limits.max_message_bytes - size + 1))
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > limits.max_message_bytes:
+                raise ArgoError("schema configuration exceeds limit")
+            chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def load_json(path, limits):

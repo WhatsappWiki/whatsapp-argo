@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from whatsapp_argo.binary import ArgoError, Limits
 from whatsapp_argo.codec import Codec
 from whatsapp_argo._schema_io import load_json
-from whatsapp_argo.schema import load_schema_store, validate_schema
+from whatsapp_argo.schema import load_schema_store, validate_schema, validate_schema_store
 
 __all__ = ["OperationRegistry"]
 
@@ -16,6 +16,8 @@ class OperationRegistry:
 
     ``documents`` is either ``{doc_id: operation_name}`` or the client asset
     shape ``{name: {"doc_id": ..., ...}}``. Unknown IDs never select a fallback.
+    Names and the combined schemas obey schema-store limits, including
+    operations with no document binding.
     """
 
     def __init__(self, schemas, documents, *, limits=Limits()):
@@ -23,7 +25,7 @@ class OperationRegistry:
             raise ArgoError("schemas and documents must be mappings")
         if len(schemas) > limits.max_container_items or len(documents) > limits.max_container_items:
             raise ArgoError("operation registry exceeds item limit")
-        self.schemas = {name: validate_schema(schema, limits) for name, schema in schemas.items()}
+        self.schemas = validate_schema_store(schemas, limits)
         self.documents, self.limits = {}, limits
         for key, entry in documents.items():
             if isinstance(entry, Mapping):
