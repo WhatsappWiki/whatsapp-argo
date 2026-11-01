@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 import struct
 
-from whatsapp_argo.binary import ArgoError, MessageWriter, label_bytes
+from whatsapp_argo.binary import ArgoError, MessageWriter, _binary, _binary_size, label_bytes
 from whatsapp_argo.models import FieldErrors, Layout, NonNull
 from whatsapp_argo._value_context import DEFAULT_BLOCKS, SCALAR_MARKERS, SCALARS, ValueContext, is_labeled
 
@@ -67,9 +67,9 @@ class Encoder:
             else:
                 if not isinstance(value, (bytes, bytearray, memoryview)):
                     raise ArgoError("BYTES requires bytes-like value")
-                if (value.nbytes if isinstance(value, memoryview) else len(value)) > self.limits.max_string_bytes:
+                if _binary_size(value) > self.limits.max_string_bytes:
                     raise ArgoError("scalar exceeds size limit")
-                raw = bytes(value)
+                raw = _binary(value)
                 value = raw
             if len(raw) > self.limits.max_string_bytes:
                 raise ArgoError("scalar exceeds size limit")
@@ -104,9 +104,9 @@ class Encoder:
         if kind == "FIXED":
             if not isinstance(value, (bytes, bytearray, memoryview)):
                 raise ArgoError("FIXED requires exact-length bytes")
-            if (value.nbytes if isinstance(value, memoryview) else len(value)) != fixed:
+            if _binary_size(value) != fixed:
                 raise ArgoError("FIXED requires exact-length bytes")
-            raw = bytes(value)
+            raw = _binary(value)
             if len(raw) != fixed:
                 raise ArgoError("FIXED requires exact-length bytes")
             if fixed > self.limits.max_string_bytes:

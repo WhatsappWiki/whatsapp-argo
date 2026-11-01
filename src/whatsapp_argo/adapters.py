@@ -46,7 +46,10 @@ class OperationRegistry:
     def _identifier(value):
         if type(value) not in (int, str) or (type(value) is int and value < 0):
             raise ArgoError("document identifier must be a nonnegative integer or text")
-        value = str(value)
+        try:
+            value = str(value)
+        except ValueError as exc:
+            raise ArgoError("document identifier exceeds Python integer conversion limit") from exc
         if not value:
             raise ArgoError("document identifier cannot be empty")
         return value

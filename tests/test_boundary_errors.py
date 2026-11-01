@@ -4,7 +4,7 @@ import sys
 import pytest
 
 from whatsapp_argo import (
-    ArgoError, FieldErrors, Header, Limits, load_schema, read,
+    ArgoError, FieldErrors, Header, Limits, OperationRegistry, load_schema, read,
     read_schema_store, write, write_schema_store,
 )
 
@@ -52,6 +52,43 @@ def test_json_integer_conversion_limit_raises_argo_error(tmp_path):
         with pytest.raises(ArgoError, match="invalid schema JSON") as caught:
             load_schema(path)
         assert isinstance(caught.value.__cause__, ValueError)
+    finally:
+        sys.set_int_max_str_digits(previous)
+
+
+@pytest.mark.skipif(not hasattr(sys, "set_int_max_str_digits"), reason="Python has no integer digit limit")
+@pytest.mark.parametrize("operation", ["mapping", "asset", "operation", "schema_for", "codec_for"])
+def test_document_identifier_conversion_limit_raises_argo_error(operation):
+    previous = sys.get_int_max_str_digits()
+    try:
+        sys.set_int_max_str_digits(640)
+        identifier = 10 ** 640
+        registry = OperationRegistry({"Q": "STRING"}, {42: "Q"})
+        with pytest.raises(ArgoError, match="identifier.*conversion limit") as caught:
+            if operation == "mapping":
+                OperationRegistry({"Q": "STRING"}, {identifier: "Q"})
+            elif operation == "asset":
+                OperationRegistry({"Q": "STRING"}, {"Q": {"doc_id": identifier}})
+            else:
+                getattr(registry, operation)(identifier)
+        assert isinstance(caught.value.__cause__, ValueError)
+        assert registry.operation(42) == "Q"
+    finally:
+        sys.set_int_max_str_digits(previous)
+
+
+@pytest.mark.skipif(not hasattr(sys, "set_int_max_str_digits"), reason="Python has no integer digit limit")
+def test_long_document_identifiers_keep_text_and_unrestricted_integer_support():
+    previous = sys.get_int_max_str_digits()
+    try:
+        identifier = 10 ** 640
+        text = "1" + "0" * 640
+        sys.set_int_max_str_digits(0)
+        registry = OperationRegistry({"Q": "STRING"}, {identifier: "Q"})
+        assert registry.operation(identifier) == "Q"
+        sys.set_int_max_str_digits(640)
+        assert registry.operation(text) == "Q"
+        assert OperationRegistry({"Q": "STRING"}, {text: "Q"}).operation(text) == "Q"
     finally:
         sys.set_int_max_str_digits(previous)
 

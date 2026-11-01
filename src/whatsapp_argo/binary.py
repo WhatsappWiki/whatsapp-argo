@@ -50,10 +50,21 @@ def label_bytes(value: int) -> bytes:
     return bytes(out)
 
 
+def _binary_size(data):
+    """Inspect byte length without copying, including non-byte memoryviews."""
+    try:
+        return data.nbytes if isinstance(data, memoryview) else len(data)
+    except ValueError as exc:
+        raise ArgoError("bytes-like data is not readable") from exc
+
+
 def _binary(data, description="data") -> bytes:
     if not isinstance(data, (bytes, bytearray, memoryview)):
         raise ArgoError(f"{description} must be bytes-like")
-    return bytes(data)
+    try:
+        return bytes(data)
+    except ValueError as exc:
+        raise ArgoError("bytes-like data is not readable") from exc
 
 
 class Reader:
@@ -186,7 +197,7 @@ class MessageReader:
     def __init__(self, raw, limits=DEFAULT_LIMITS):
         if not isinstance(raw, (bytes, bytearray, memoryview)):
             raise ArgoError("message must be bytes-like")
-        raw_length = raw.nbytes if isinstance(raw, memoryview) else len(raw)
+        raw_length = _binary_size(raw)
         if raw_length > limits.max_message_bytes:
             raise ArgoError("message exceeds limit")
         self.limits = limits
@@ -249,7 +260,7 @@ class _BoundedBuffer(bytearray):
     def extend(self, value):
         if not isinstance(value, (bytes, bytearray, memoryview)):
             raise ArgoError("internal message buffer requires bytes-like data")
-        size = value.nbytes if isinstance(value, memoryview) else len(value)
+        size = _binary_size(value)
         self._budget.claim(size)
         try:
             super().extend(value)
@@ -276,7 +287,7 @@ class _BoundedBuffer(bytearray):
             raise ArgoError("internal message buffer requires bytes-like data")
         start, stop, step = key.indices(len(self))
         removed = len(range(start, stop, step))
-        added = value.nbytes if isinstance(value, memoryview) else len(value)
+        added = _binary_size(value)
         growth = added - removed
         self._budget.claim(growth)
         try:
