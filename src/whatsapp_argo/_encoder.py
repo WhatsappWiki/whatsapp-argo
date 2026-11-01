@@ -154,7 +154,12 @@ class Encoder:
                 return
             if isinstance(value, NonNull):
                 value = value.value
-                if (value is None or isinstance(value, (FieldErrors, NonNull))) and (
+                ambiguous = value is None or isinstance(value, FieldErrors)
+                if isinstance(value, NonNull):
+                    # A nested NULLABLE checks its own wrapper. Its eventual
+                    # non-null Label can distinguish every outer layer too.
+                    ambiguous = self.header.self_describing or wire["of"]["type"] != "NULLABLE"
+                if ambiguous and (
                     self.header.self_describing or is_labeled(wire["of"])
                 ):
                     raise ArgoError("this nullable schema/header cannot distinguish non-null inner null")
