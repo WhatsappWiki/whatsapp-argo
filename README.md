@@ -53,6 +53,27 @@ assert codec.read(updated).value["count"] == 8
 
 示例使用 Header `0x04`；`Header()` 默认 `0x0c`。读取返回 `Document`，写入会复用其 schema、Header 与格式设置。业务接入、完整类型、错误和逐字节回写见 [Argo 协议文章](https://github.com/WhatsappWiki/whatsapp-technical-wiki/blob/main/protocol/argo.md#zh)。
 
+### 项目结构
+
+代码保持扁平的 `src/whatsapp_argo/` 布局，测试统一放在 `tests/`：
+
+| 模块 | 职责 |
+| --- | --- |
+| `codec.py` | `Codec`、`read`、`write` 公共入口，组装每次调用的独立状态 |
+| `models.py` | `Document`、`Layout`、`FieldErrors`、`NonNull` 数据模型 |
+| `_decoder.py` / `_encoder.py` | 值解码与编码，各自持有标量去重及布局状态 |
+| `_value_context.py` | 通过组合共享的资源限制、路径解析和错误校验逻辑 |
+| `binary.py` | Label、Header、消息分块和有界字节缓冲 |
+| `schema.py` | schema 公共 API，保留原有导入入口 |
+| `_schema_validation.py` | schema 与操作集合的纯校验、规范化 |
+| `_schema_store.py` | wire-type store 的二进制读写 |
+| `_schema_io.py` | 有大小限制、拒绝重复 JSON 键的外部配置读取 |
+| `adapters.py` | 外部 doc ID 与操作 schema 的绑定 |
+
+依赖由公共入口指向实现和基础模块；数据模型与二进制层不依赖编解码入口。每次读写新建上下文，编码器与解码器通过组合使用校验逻辑，各自保留去重状态。文件读取仅在显式调用加载入口时发生，纯校验和二进制序列化不读取文件。
+
+各模块使用 `__all__` 明确导出。优先从 `whatsapp_argo` 导入公共 API；现有 `whatsapp_argo.codec`、`whatsapp_argo.schema`、`whatsapp_argo.binary` 和 `whatsapp_argo.adapters` 的公共入口继续可用，模型也可从 `whatsapp_argo.models` 导入。以下划线开头的模块为内部实现，不作为稳定接口。
+
 ### 测试与构建
 
 ```sh
@@ -120,6 +141,27 @@ assert codec.read(updated).value["count"] == 8
 ```
 
 The example uses header `0x04`; `Header()` defaults to `0x0c`. Reading returns a `Document`, and writing reuses its schema, header and format settings. See the [Argo article](https://github.com/WhatsappWiki/whatsapp-technical-wiki/blob/main/protocol/argo.md#en) for business integration, complete types, errors and exact rewriting.
+
+### Project structure
+
+The package keeps a flat `src/whatsapp_argo/` layout, with tests together in `tests/`:
+
+| Module | Responsibility |
+| --- | --- |
+| `codec.py` | Public `Codec`, `read` and `write` entry points; independent state for each call |
+| `models.py` | `Document`, `Layout`, `FieldErrors` and `NonNull` data models |
+| `_decoder.py` / `_encoder.py` | Value decoding and encoding, each owning its scalar deduplication and layout state |
+| `_value_context.py` | Composed resource limits, path resolution and error validation |
+| `binary.py` | Labels, headers, message framing and bounded byte buffers |
+| `schema.py` | Public schema API, retaining existing import paths |
+| `_schema_validation.py` | Pure validation and normalization of schemas and operation stores |
+| `_schema_store.py` | Binary wire-type store reading and writing |
+| `_schema_io.py` | Bounded external configuration loading that rejects duplicate JSON keys |
+| `adapters.py` | External doc-ID-to-operation schema bindings |
+
+Dependencies point from public entry points to implementation and foundational modules; models and binary primitives do not depend on the codec entry points. Each read or write creates a fresh context. Encoders and decoders compose validation behavior and retain separate deduplication state. Files are read only through explicit loading calls; pure validation and binary serialization do not access the filesystem.
+
+Modules declare exports with `__all__`. Prefer importing the public API from `whatsapp_argo`. Existing public entry points in `whatsapp_argo.codec`, `whatsapp_argo.schema`, `whatsapp_argo.binary` and `whatsapp_argo.adapters` remain available; models can also be imported from `whatsapp_argo.models`. Modules starting with an underscore are internal and are not stable interfaces.
 
 ### Tests and builds
 

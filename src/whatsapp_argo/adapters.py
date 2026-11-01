@@ -3,9 +3,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from .binary import ArgoError, Limits
-from .codec import Codec
-from .schema import _load_json, load_schema_store, validate_schema
+from whatsapp_argo.binary import ArgoError, Limits
+from whatsapp_argo.codec import Codec
+from whatsapp_argo._schema_io import load_json
+from whatsapp_argo.schema import load_schema_store, validate_schema
+
+__all__ = ["OperationRegistry"]
 
 
 class OperationRegistry:
@@ -49,7 +52,7 @@ class OperationRegistry:
     @classmethod
     def from_files(cls, schema_store, document_ids, *, limits=Limits()):
         return cls(load_schema_store(schema_store, limits),
-                   _load_json(document_ids, limits), limits=limits)
+                   load_json(document_ids, limits), limits=limits)
 
     def operation(self, doc_id):
         key = self._identifier(doc_id)

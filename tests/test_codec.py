@@ -271,3 +271,83 @@ def test_reusable_codec_has_no_shared_dedup_state():
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=4) as executor:
         assert list(executor.map(lambda _: codec.write(["x", "x"]), range(20))) == [expected] * 20
+
+
+@pytest.mark.parametrize("path_mode", ["relative", "root"])
+def test_inline_error_path_scope_restored_between_fields(path_mode):
+    schema = record(field("data", record(
+        field("left", nullable(record(field("name", "STRING")))),
+        field("right", nullable(record(field("code", "STRING")))),
+        field("path", "PATH"),
+    )))
+    left_path = ["name"] if path_mode == "relative" else ["left", "name"]
+    right_path = ["code"] if path_mode == "relative" else ["right", "code"]
+    value = {"data": {
+        "left": FieldErrors([{"message": "left", "path": left_path}]),
+        "right": FieldErrors([{"message": "right", "path": right_path}]),
+        "path": ["right", "code"],
+    }}
+    header = Header(inline_everything=True, out_of_band_field_errors=False, self_describing_errors=False)
+    # Literal inline labels: FieldErrors (-3), count 1, message, absent
+    # locations (-2), PATH ordinals, absent extensions (-2), then root PATH.
+    left_wire_path = "0200" if path_mode == "relative" else "040000"
+    right_wire_path = "0200" if path_mode == "relative" else "040200"
+    raw = bytes.fromhex(
+        "010502086c65667403" + left_wire_path + "03"
+        "05020a726967687403" + right_wire_path + "03040200"
+    )
+    codec = Codec(schema, inline_error_paths=path_mode)
+    assert codec.write(value, header=header) == raw
+    document = codec.read(raw, preserve_layout=True)
+    assert document.value == value
+    assert codec.write(document, preserve_layout=True) == raw
+
+
+def test_codec_context_is_discarded_after_failed_read_or_write():
+    schema = array("STRING")
+    codec = Codec(schema, limits=Limits(max_total_values=3))
+    payload = codec.write(["same", "same"])
+    with pytest.raises(ArgoError, match="total item limit"):
+        codec.write(["same", "same", "same"])
+    oversized = write(["same", "same", "same"], schema)
+    with pytest.raises(ArgoError, match="total item limit"):
+        codec.read(oversized)
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    def rewrite(_):
+        document = codec.read(payload, preserve_layout=True)
+        assert document.value == ["same", "same"]
+        return codec.write(document, preserve_layout=True)
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        assert list(executor.map(rewrite, range(20))) == [payload] * 20
+
+
+@pytest.mark.parametrize("kind", ["RECORD", "NULLABLE"])
+def test_raised_depth_limit_retains_original_recursive_capacity(kind):
+    import sys
+
+    schema, value = "STRING", "x"
+    for _ in range(600):
+        if kind == "RECORD":
+            schema = record(field("x", schema))
+            value = {"x": value}
+        else:
+            schema = nullable(schema)
+
+    # Both shapes encode only String("x"): required RECORD fields and labeled
+    # non-null values add no bytes. Do not recursively compare the deep dicts.
+    expected = bytes.fromhex("0c02780202")
+    previous = sys.getrecursionlimit()
+    try:
+        sys.setrecursionlimit(1000)
+        limits = Limits(max_depth=650)
+        assert write(value, schema, limits=limits) == expected
+        decoded = read(expected, schema, limits=limits).value
+        if kind == "RECORD":
+            for _ in range(600):
+                decoded = decoded["x"]
+        assert decoded == "x"
+    finally:
+        sys.setrecursionlimit(previous)
