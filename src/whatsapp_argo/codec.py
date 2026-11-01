@@ -52,7 +52,11 @@ def read(data, schema=None, *, limits=Limits(), preserve_layout=False, path_sche
 
 def write(value, schema=None, *, header=None, limits=Limits(), preserve_layout=False, path_schema=None,
           inline_error_paths=None, error_encoding=None):
-    """Freshly encode a value or Document; optionally reuse encoding decisions."""
+    """Freshly encode a value or Document; optionally reuse encoding decisions.
+
+    Layout decisions are checked only when preservation is requested. Invalid
+    or incompatible decisions raise ArgoError instead of selecting defaults.
+    """
     document = value if isinstance(value, Document) else None
     if document is not None:
         value = document.value
@@ -77,9 +81,13 @@ def write(value, schema=None, *, header=None, limits=Limits(), preserve_layout=F
         if document is None or document.layout is None:
             raise ArgoError("preserve_layout requires read(..., preserve_layout=True) Document")
         layout = document.layout
+        if not isinstance(layout, Layout):
+            raise ArgoError("document layout must be Layout")
         if (layout.schema_digest != _digest(schema) or layout.path_digest != _digest((path_schema, inline_error_paths, error_encoding))
                 or layout.header != header):
             raise ArgoError("schema/header changed; layout cannot be reused")
+        if not isinstance(layout.events, (tuple, list)):
+            raise ArgoError("layout events must be a list or tuple")
     message = MessageWriter(header, limits)
     context = ValueContext(header, schema, limits, path_schema, inline_error_paths, error_encoding)
     encoder = Encoder(message, context, layout)

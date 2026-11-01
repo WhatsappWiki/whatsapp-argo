@@ -27,6 +27,8 @@ class Encoder:
             raise ArgoError("layout has too few encoding decisions")
         event = self.layout.events[self.event_index]
         self.event_index += 1
+        if not isinstance(event, tuple) or len(event) != len(prefix) + 2:
+            raise ArgoError("invalid layout encoding decision")
         if event[:len(prefix) + 1] != (kind, *prefix):
             raise ArgoError("layout no longer matches value structure")
         return event[-1]
@@ -76,6 +78,8 @@ class Encoder:
             if self.layout is None and active_dedupe:
                 reference = self.seen_index.setdefault(key, {}).get(value)
             if reference is not None:
+                if type(reference) is not int:
+                    raise ArgoError("layout backreference must be an integer")
                 if not active_dedupe or not 0 <= reference < len(seen) or seen[reference] != value:
                     raise ArgoError("changed value is incompatible with preserved backreference")
                 self.label(-4 - reference)
@@ -119,8 +123,10 @@ class Encoder:
 
     def order(self, kind, value, default):
         order = self.event(kind)
-        if order is None:
+        if self.layout is None:
             return default
+        if not isinstance(order, (tuple, list)) or any(type(name) is not str for name in order):
+            raise ArgoError("invalid layout field order")
         if len(order) != len(value) or set(order) != set(value):
             raise ArgoError("record keys changed; preserved layout is incompatible")
         return order
