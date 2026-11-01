@@ -40,7 +40,10 @@ def read(data, schema=None, *, limits=Limits(), preserve_layout=False, path_sche
     path_schema = None if path_schema is None else validate_schema(path_schema, limits)
     context = ValueContext(msg.header, schema, limits, path_schema, inline_error_paths, error_encoding)
     decoder = Decoder(msg, context)
-    value = decoder.value(schema)
+    try:
+        value = decoder.value(schema)
+    except RecursionError as exc:
+        raise ArgoError("value nesting exceeds Python recursion capacity") from exc
     msg.finish()
     layout = Layout(_digest(schema), _digest((path_schema, inline_error_paths, error_encoding)), msg.header,
                     tuple(decoder.events)) if preserve_layout else None
@@ -80,7 +83,10 @@ def write(value, schema=None, *, header=None, limits=Limits(), preserve_layout=F
     message = MessageWriter(header, limits)
     context = ValueContext(header, schema, limits, path_schema, inline_error_paths, error_encoding)
     encoder = Encoder(message, context, layout)
-    encoder.value(schema, value)
+    try:
+        encoder.value(schema, value)
+    except RecursionError as exc:
+        raise ArgoError("value nesting exceeds Python recursion capacity") from exc
     if layout is not None and encoder.event_index != len(layout.events):
         raise ArgoError("layout has unused encoding decisions")
     return encoder.msg.finish()

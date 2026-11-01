@@ -131,11 +131,14 @@ def read_schema_store(raw, limits=DEFAULT_LIMITS):
     if message.core.label() != 2:
         raise ArgoError("not a wire-type store")
     result = {}
-    for _ in range(codec.count(message.core.label())):
-        name = codec.string()
-        if name in result:
-            raise ArgoError("duplicate operation name")
-        result[name] = codec.wire()
+    try:
+        for _ in range(codec.count(message.core.label())):
+            name = codec.string()
+            if name in result:
+                raise ArgoError("duplicate operation name")
+            result[name] = codec.wire()
+    except RecursionError as exc:
+        raise ArgoError("schema nesting exceeds Python recursion capacity") from exc
     message.finish()
     return result
 
@@ -146,7 +149,10 @@ def write_schema_store(store, header=Header(), limits=DEFAULT_LIMITS):
     message = MessageWriter(header, limits)
     codec = _StoreCodec(message, False)
     message.core.extend(label_bytes(2) + label_bytes(len(store)))
-    for name, wire in store.items():
-        codec.string(name)
-        codec.wire(wire)
+    try:
+        for name, wire in store.items():
+            codec.string(name)
+            codec.wire(wire)
+    except RecursionError as exc:
+        raise ArgoError("schema nesting exceeds Python recursion capacity") from exc
     return message.finish()

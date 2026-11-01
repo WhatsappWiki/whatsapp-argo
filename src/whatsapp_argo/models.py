@@ -21,9 +21,21 @@ class FieldErrors:
         object.__setattr__(self, "errors", tuple(self.errors))
 
     def full_paths(self, prefix):
-        """Return errors with their relative paths prefixed by the field path."""
-        return tuple({**error, **({"path": list(prefix) + error["path"]} if error.get("path") is not None else {})}
-                     for error in self.errors)
+        """Return copied errors with the field prefix added to relative paths.
+
+        The prefix may be an iterable; paths may be lists or tuples. Missing
+        paths and explicit null paths are preserved.
+        """
+        prefix_parts = None
+        result = []
+        for error in self.errors:
+            copied = {**error}
+            if error.get("path") is not None:
+                if prefix_parts is None:
+                    prefix_parts = list(prefix)
+                copied["path"] = prefix_parts + list(error["path"])
+            result.append(copied)
+        return tuple(result)
 
 
 @dataclass(frozen=True)

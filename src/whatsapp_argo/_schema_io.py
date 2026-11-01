@@ -33,9 +33,13 @@ def _read_file(path, limits):
 
 
 def load_json(path, limits):
+    raw = _read_file(path, limits)
     try:
-        return json.loads(_read_file(path, limits).decode("utf-8"), object_pairs_hook=_json_unique)
-    except (UnicodeError, json.JSONDecodeError, RecursionError) as exc:
+        return json.loads(raw.decode("utf-8"), object_pairs_hook=_json_unique)
+    except ArgoError:
+        # Preserve the specific duplicate-key error from object_pairs_hook.
+        raise
+    except (ValueError, RecursionError) as exc:
         raise ArgoError("invalid schema JSON") from exc
 
 
